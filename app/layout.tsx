@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { Analytics } from '@vercel/analytics/react';
 
 export const metadata: Metadata = {
-  title: 'Codebender Resume Worth',
+  title: 'CodeOne Resume Worth',
   description: 'Measure how much your resume is worth!',
 }
 
