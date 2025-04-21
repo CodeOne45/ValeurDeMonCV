@@ -8,6 +8,20 @@ type Props = {
   setFileSelected: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
+// Interface pour les métadonnées PDF
+interface PDFMetadataInfo {
+  Title?: string;
+  Author?: string;
+  Subject?: string;
+  Keywords?: string;
+  [key: string]: any; // Pour les autres propriétés possibles
+}
+
+interface PDFMetadata {
+  info?: PDFMetadataInfo;
+  [key: string]: any;
+}
+
 const ResumeUploader: React.FC<Props> = ({ 
   setResumeText, 
   setIsLoading,
@@ -78,7 +92,7 @@ const ResumeUploader: React.FC<Props> = ({
             // Ensure we have at least some text content
             if (completeText.trim().length < 50) {
               // If text is too short, try to get metadata as fallback
-              const metadata = await pdfDoc.getMetadata();
+              const metadata = await pdfDoc.getMetadata() as PDFMetadata;
               if (metadata && metadata.info) {
                 completeText += `\nTitre: ${metadata.info.Title || 'Non disponible'}\n`;
                 completeText += `Auteur: ${metadata.info.Author || 'Non disponible'}\n`;

@@ -7,8 +7,7 @@ import {
   Building, 
   Star, 
   StarHalf,
-  Award, 
-  MessageCircle
+  Award
 } from "lucide-react";
 
 type LocationData = {
@@ -45,10 +44,6 @@ const ResumeWorth: React.FC<ResumeWorthProps> = ({ resumeWorth, locationData }) 
   } else if (estimatedWorthValue.startsWith('€')) {
     estimatedWorthValue = estimatedWorthValue.slice(1) + ' €';
   }
-
-  // Extract overview section
-  const overviewMatch = resumeWorth.match(/<Overview>([\s\S]*?)<\/Overview>/);
-  const overview = overviewMatch ? overviewMatch[1].trim() : '';
 
   // Extract explanation and improvements sections
   const explanationMatch = resumeWorth.match(/<Explanation>([\s\S]*?)<\/Explanation>/);
@@ -118,8 +113,12 @@ const ResumeWorth: React.FC<ResumeWorthProps> = ({ resumeWorth, locationData }) 
   const overallScore = calculateOverallScore(criteria);
 
   // Extract the list items
-  let explanationItems = explanation.match(/<li>(.+?)<\/li>/g) || [];
-  let improvementItems = improvements.match(/<li>(.+?)<\/li>/g) || [];
+  const explanationMatchItems = explanation.match(/<li>(.+?)<\/li>/g) || [];
+  const improvementMatchItems = improvements.match(/<li>(.+?)<\/li>/g) || [];
+  
+  // Convert to string arrays
+  let explanationItems: string[] = [...explanationMatchItems];
+  let improvementItems: string[] = [...improvementMatchItems];
   
   // If no <li> tags found, try to extract items in alternative format
   if (explanationItems.length === 0 && explanation.includes('- ')) {
@@ -188,15 +187,6 @@ const ResumeWorth: React.FC<ResumeWorthProps> = ({ resumeWorth, locationData }) 
       
       {/* Main Content */}
       <div className="p-6">
-        {/* Overview Section */}
-        {overview && (
-          <div className="mb-8 bg-blue-50 p-5 rounded-lg border border-blue-100">
-            <h3 className="font-medium text-gray-800 flex items-center mb-3">
-              <MessageCircle className="h-5 w-5 text-blue-600 mr-2" /> Vue d'ensemble
-            </h3>
-            <p className="text-gray-700">{overview}</p>
-          </div>
-        )}
         {/* Overall Score Card */}
         <div className="mb-8 flex flex-col sm:flex-row gap-4">
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex-1">
