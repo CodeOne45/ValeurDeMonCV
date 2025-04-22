@@ -40,11 +40,11 @@ const ResumeWorth: React.FC<ResumeWorthProps> = ({ resumeWorth, locationData }) 
       
   // Ensure the format is correct
   estimatedWorthValue = estimatedWorthValue.replace('...', '');
-  if (!estimatedWorthValue.includes('€')) {
+  /*if (!estimatedWorthValue.includes('€')) {
     estimatedWorthValue += ' €';
   } else if (estimatedWorthValue.startsWith('€')) {
     estimatedWorthValue = estimatedWorthValue.slice(1) + ' €';
-  }
+  }*/
 
    // Extract overview section
    const overviewMatch = resumeWorth.match(/<Overview>([\s\S]*?)<\/Overview>/);

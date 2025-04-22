@@ -3,6 +3,7 @@ import { StreamingTextResponse } from 'ai';
 
 export const runtime = 'edge';
 
+// Définir l'interface pour les scores d'évaluation
 interface CVScores {
   experience?: number;
   skills?: number;
@@ -32,6 +33,30 @@ export async function POST(req: Request) {
     }
   }
 
+  // Standardize country names for better detection
+  const countryMappings: { [key: string]: string } = {
+    "etats unis": "États-Unis",
+    "etats-unis": "États-Unis",
+    "usa": "États-Unis",
+    "united states": "États-Unis",
+    "us": "États-Unis",
+    "united kingdom": "Royaume-Uni",
+    "uk": "Royaume-Uni",
+    "england": "Royaume-Uni",
+    "angleterre": "Royaume-Uni",
+    "germany": "Allemagne",
+    "deutschland": "Allemagne",
+    "spain": "Espagne",
+    "españa": "Espagne",
+    "espana": "Espagne"
+  };
+
+  // Normalize the country name (lowercase for comparison)
+  const normalizedCountry = locationData.country.toLowerCase();
+  if (countryMappings[normalizedCountry]) {
+    locationData.country = countryMappings[normalizedCountry];
+  }
+
   const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY || ''
   });
@@ -58,81 +83,18 @@ export async function POST(req: Request) {
   let resumeLanguage = "français"; // Default
   try {
     const langDetection = await groq.chat.completions.create({
-      model: "llama3-8b-8192",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages: [{ role: 'user', content: languageDetectionPrompt }],
       temperature: 0.1,
       max_tokens: 10,
     });
     
     const detectedLang = langDetection.choices[0]?.message?.content?.toLowerCase().trim() || "français";
-    if (["français", "anglais", "english", "french"].includes(detectedLang)) {
-      resumeLanguage = detectedLang === "english" ? "anglais" : (detectedLang === "french" ? "français" : detectedLang);
-    }
+    resumeLanguage = detectedLang;
+    
   } catch (error) {
     console.error("Error detecting language:", error);
   }
-
-  // Salaires par niveau d'expérience, position et secteur
-  const salaryReferenceData = `
-Salaires moyens en France (2025) par niveau d'expérience:
-- Junior (0-2 ans): 35 000€ - 45 000€
-- Intermédiaire (3-5 ans): 45 000€ - 65 000€
-- Senior (6-9 ans): 65 000€ - 85 000€
-- Expert (10+ ans): 85 000€ - 120 000€+
-
-Par poste technique:
-- Développeur Front-end Junior: 35 000€ - 45 000€
-- Développeur Front-end Senior: 55 000€ - 70 000€
-- Développeur Back-end Junior: 38 000€ - 48 000€
-- Développeur Back-end Senior: 60 000€ - 80 000€
-- Développeur Full-stack Junior: 40 000€ - 50 000€
-- Développeur Full-stack Senior: 65 000€ - 85 000€
-- DevOps Engineer: 55 000€ - 85 000€
-- Data Scientist: 45 000€ - 90 000€
-- Data Engineer: 50 000€ - 80 000€
-- ML Engineer: 60 000€ - 95 000€
-- Architecte logiciel: 75 000€ - 110 000€
-- SRE: 65 000€ - 95 000€
-- QA Engineer: 40 000€ - 70 000€
-
-Par poste managérial:
-- Chef de projet IT: 50 000€ - 75 000€
-- Product Manager: 55 000€ - 90 000€
-- Tech Lead: 70 000€ - 95 000€
-- Engineering Manager: 80 000€ - 110 000€
-- CTO: 90 000€ - 150 000€+
-
-Par secteur:
-- Banque/Finance: +10% à +25%
-- Santé/Pharma: +5% à +15%
-- E-commerce: 0% à +10%
-- Secteur public: -15% à -30%
-- ESN/Consulting: -5% à +10%
-- Startup (early stage): -10% à -20% (mais souvent avec equity)
-- Scale-up: 0% à +15%
-
-Ajustements régionaux:
-- Paris: Base de référence
-- Lyon/Bordeaux/Toulouse: -5% à -15%
-- Autres grandes villes: -10% à -20%
-- Zones rurales: -15% à -30%
-- Remote pour entreprises étrangères: +10% à +50%
-
-Impact des compétences:
-- Technologies à forte demande (AI/ML, blockchain, cybersécurité): +10% à +25%
-- Technologies standard actuelles: Référence
-- Technologies obsolètes: -10% à -30%
-
-Impact des diplômes:
-- Écoles d'ingénieurs prestigieuses: +5% à +15%
-- Master universitaire: 0% à +5%
-- Autodidacte avec preuves de compétence: -5% à 0%
-- Bootcamp sans expérience significative: -10% à -15%
-
-Impact des langues:
-- Anglais courant: +5% à +15%, indispensable pour salaires >80k€
-- Autres langues commerciales: +2% à +8% selon le contexte
-`;
 
   // Analyze first with a separate call to get objective criteria scores
   const analysisPrompt = `
@@ -180,9 +142,9 @@ ${resumeText}
     languages: 3,
     industry_knowledge: 3
   };
-
+  
   let scores: CVScores = { ...defaultScores };
-  // Get objective scores first
+  
   try {
     const analysis = await groq.chat.completions.create({
       model: "llama3-8b-8192",
@@ -200,7 +162,7 @@ ${resumeText}
         const parsedScores = JSON.parse(jsonMatch[0]) as CVScores;
         // Merge with default scores to ensure all properties exist
         scores = { ...defaultScores, ...parsedScores };
-        //console.log("Extracted scores:", scores);
+        //console.log("Extracted scores:", resumeLanguage);
       } catch (e) {
         console.error("Failed to parse scores:", e);
       }
@@ -209,32 +171,40 @@ ${resumeText}
     console.error("Error analyzing CV:", error);
   }
 
+  // Generate additional location context
+  let locationContext = "";
+  
+  locationContext = `
+INFORMATIONS SUR LA LOCALISATION:
+- Pays: ${locationData.country}
+- Ville: ${locationData.city || "Non spécifiée"}
+- Type d'entreprise: ${locationData.companyType || "Non spécifié"}
+- Entreprise ciblée: ${locationData.customCompany || "Non spécifiée"}
+`;
+
   // Use the objective scores in the main response
-  const criteriaScoresText = Object.keys(scores).length > 0 
-    ? `Les scores d'évaluation de ce CV, basés sur une analyse objective, sont:
-${Object.entries(scores).map(([key, value]) => `- ${key}: ${value}/5`).join('\n')}`
-    : '';
+  const criteriaScoresText = `Les scores d'évaluation de ce CV, basés sur une analyse objective, sont:
+${Object.entries(scores).map(([key, value]) => `- ${key}: ${value}/5`).join('\n')}`;
 
   const response = await groq.chat.completions.create({
-    model: "llama3-8b-8192",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
     messages: [{
       role: 'user',
-      content: `CONTEXTE: Tu es un expert en recrutement et évaluation de CV en ${locationData.country || 'France'}. Tu vas analyser le CV ci-dessous et donner une estimation réaliste du salaire que cette personne peut demander, basée sur les données actuelles du marché.
+      content: `CONTEXTE: Tu es un expert en recrutement et évaluation de CV en ${locationData.country}. Tu vas analyser le CV ci-dessous et donner une estimation réaliste du salaire annuel que cette personne peut demander, basée sur les données actuelles du marché.
 
-${locationData.city ? `L'analyse est spécifiquement pour ${locationData.city}.` : ''} 
-${locationData.companyType ? `Le type d'entreprise est ${locationData.companyType}.` : ''} 
-${locationData.customCompany ? `L'entreprise spécifique visée est ${locationData.customCompany}.` : ''}
+${locationContext}
 
 ANALYSE OBJECTIVE PRÉLIMINAIRE DU CV:
 ${criteriaScoresText}
 
 CONSIGNES IMPORTANTES:
 - SOIS CRITIQUE ET HONNÊTE dans ton évaluation. N'hésite pas à relever les points faibles.
-- Tu dois IMPÉRATIVEMENT répondre en FRANÇAIS.
-- Ton estimation salariale doit être précise et toujours exprimée en euros avec un intervalle (ex: 45 000€ - 50 000€).
+- Tu dois IMPÉRATIVEMENT répondre en ${resumeLanguage || 'FRANÇAIS'}.
+- Ton estimation salariale doit être précise et toujours exprimée avec la devise appropriée au pays (qui est dans INFORMATIONS SUR LA LOCALISATION) et avec un intervalle réduite (ex: 45000 - 50000€).
+- Pour les pays, viles et type d'entreprise, assure-toi que les salaires correspondent aux standards géographique et entreprise.
 - Fournis 4 points d'explication courts sur les facteurs clés contribuant à cette évaluation.
 - Fournis 4 conseils sur comment la personne peut augmenter sa valeur sur le marché.
-- Chaque point doit faire moins de 80 caractères.
+- Chaque point doit faire moins de 120 mots.
 - Ton style doit être professionnel mais direct.
 - Adresse-toi directement à la personne (tutoiement).
 - Utilise les scores d'évaluation fournis dans l'analyse préliminaire, et NON les exemples de scores.
@@ -246,7 +216,7 @@ CV À ANALYSER:
 ${resumeText}
 -------
 FORMAT DE SORTIE (À SUIVRE EXACTEMENT):
-<Estimated Worth>FOURCHETTE DE SALAIRE ICI</Estimated Worth>
+<Estimated Worth>FOURCHETTE DE SALAIRE ANNUEL ICI AVEC SEULEMENT LA DEVISE APPROPRIÉE du pays (qui est dans INFORMATIONS SUR LA LOCALISATION ex: France alors --> 45000 - 50000€))</Estimated Worth>
 <Overview>Bref résumé de l'analyse générale du CV en 2-3 phrases. Sois spécifique et critique. Adresse-toi directement à la personne (tutoiement)</Overview>
 <Explanation>
    <ul>
@@ -266,16 +236,16 @@ FORMAT DE SORTIE (À SUIVRE EXACTEMENT):
 </Improvements>
 <Criteria>
 [
-  {"name": "Expérience", "score": ${scores.experience || '3'}, "description": "Années d'expérience professionnelle pertinente"},
-  {"name": "Compétences techniques", "score": ${scores.skills || '3'}, "description": "Maîtrise des compétences techniques requises"},
-  {"name": "Formation", "score": ${scores.education || '3'}, "description": "Niveau d'études et pertinence de la formation"},
-  {"name": "Soft Skills", "score": ${scores.soft_skills || '3'}, "description": "Communication, travail d'équipe, etc."},
-  {"name": "Leadership", "score": ${scores.leadership || '3'}, "description": "Capacité à diriger des équipes et prendre des initiatives"},
-  {"name": "Accomplissements", "score": ${scores.achievements || '3'}, "description": "Réalisations et résultats quantifiables"},
-  {"name": "Clarté du CV", "score": ${scores.cv_clarity || '3'}, "description": "Organisation et présentation du CV"},
-  {"name": "Adéquation au marché", "score": ${scores.market_fit || '3'}, "description": "Correspondance avec les besoins du marché actuel"},
-  {"name": "Langues", "score": ${scores.languages || '3'}, "description": "Maîtrise de langues étrangères"},
-  {"name": "Connaissance du secteur", "score": ${scores.industry_knowledge || '3'}, "description": "Familiarité avec l'industrie visée"}
+  {"name": "Expérience", "score": ${scores.experience}, "description": "Années d'expérience professionnelle pertinente"},
+  {"name": "Compétences techniques", "score": ${scores.skills}, "description": "Maîtrise des compétences techniques requises"},
+  {"name": "Formation", "score": ${scores.education}, "description": "Niveau d'études et pertinence de la formation"},
+  {"name": "Soft Skills", "score": ${scores.soft_skills}, "description": "Communication, travail d'équipe, etc."},
+  {"name": "Leadership", "score": ${scores.leadership}, "description": "Capacité à diriger des équipes et prendre des initiatives"},
+  {"name": "Accomplissements", "score": ${scores.achievements}, "description": "Réalisations et résultats quantifiables"},
+  {"name": "Clarté du CV", "score": ${scores.cv_clarity}, "description": "Organisation et présentation du CV"},
+  {"name": "Adéquation au marché", "score": ${scores.market_fit}, "description": "Correspondance avec les besoins du marché actuel"},
+  {"name": "Langues", "score": ${scores.languages}, "description": "Maîtrise de langues étrangères"},
+  {"name": "Connaissance du secteur", "score": ${scores.industry_knowledge}, "description": "Familiarité avec l'industrie visée"}
 ]
 </Criteria>`
     }],
